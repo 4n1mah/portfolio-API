@@ -16,9 +16,11 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_url(self) -> str:
-        """Neon entrega la URL como postgresql://; SQLAlchemy necesita el driver en el nombre."""  
-        if self.database_url.startswith("postgresql://"):
-            return self.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
-        return self.database_url
+        """Limpia la URL y le agrega el driver: sin eso SQLAlchemy busca psycopg2, que no usamos."""
+        url = self.database_url.strip().strip('"').strip("'")
+        for prefix in ("postgresql://", "postgres://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix) :]
+        return url
 
 settings = Settings()
