@@ -10,8 +10,10 @@ from app.routers import visits
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Crea las tablas que falten al arrancar. Más adelante esto lo harán las migraciones (Alembic).
-    Base.metadata.create_all(engine)
+    # En local (SQLite) las tablas se crean al vuelo. En producción no: ya existen (create_tables.py),
+    # y si la base fallara, el arranque tumbaría hasta /health.
+    if settings.sqlalchemy_url.startswith("sqlite"):
+        Base.metadata.create_all(engine)
     yield
 
 
@@ -29,4 +31,5 @@ app.include_router(visits.router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    # El esquema (sqlite o postgresql+psycopg) dice qué base usa este despliegue, sin filtrar la URL.
+    return {"status": "ok", "database": settings.sqlalchemy_url.split("://", 1)[0]}
