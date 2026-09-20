@@ -1,5 +1,0 @@
-[tool.pytest.ini_options]
-filterwarnings = [
-    # Aviso interno de Starlette (usa un nombre viejo de anyio); no viene de nuestro código.
-    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
-]
