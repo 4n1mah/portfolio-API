@@ -3,9 +3,11 @@ from uuid import uuid4
 
 from app.models import Visit
 
-def visit(client, section, session_id=None):
+SITE = "https://sadielrojas.vercel.app"
+
+def visit(client, section, session_id=None, origin= SITE):
     return client.post(
-        "/visits", json={"section": section, "session_id": str(session_id or uuid4())}
+        "/visits", json={"section": section, "session_id": str(session_id or uuid4())}, headers={"Origin": origin} if origin else {}
     )
 
 
@@ -46,6 +48,15 @@ def test_same_session_counts_once(client):
 
 def test_rejects_unknown_section(client):
     assert visit(client, "admin").status_code == 422
+
+
+def test_rejects_visits_from_another_site(client):
+    assert visit(client, "about", origin="https://copia-del-portafolio.com").status_code == 403
+    assert client.get("/visits/stats").json()["total"] == 0
+
+
+def test_rejects_visits_without_an_origin(client):
+    assert visit(client, "about", origin=None).status_code == 403
 
 
 def test_days_filter_ignores_older_visits(client, db):

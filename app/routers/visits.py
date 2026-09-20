@@ -1,13 +1,12 @@
-from typing import Annotated
-
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.models import Visit
 from app.schemas import SECTIONS, SectionStat, StatsOut, VisitIn
@@ -17,7 +16,16 @@ router = APIRouter(prefix="/visits", tags=["visits"])
 DbSession = Annotated[Session, Depends(get_db)]
 STATS_CACHE_SECONDS = 30
 
-@router.post("", status_code=status.HTTP_204_NO_CONTENT)
+def require_known_origin(origin: Annotated[str | None, Header()] = None) -> None:
+    """CORS solo lo obedece el navegador; esto mira de dónde viene la petición en el servidor.
+
+    No es un candado: quien use curl puede mandar la cabecera que quiera. Lo que corta es a
+    quien ve la petición en las herramientas del navegador y prueba a repetirla.
+    """
+    if origin not in settings.origins:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origen no permitido") 
+
+@router.post("", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_known_origin)],)
 def record_visit(visit: VisitIn, db: DbSession) -> None:
     db.add(Visit(section=visit.section, session_id=str(visit.session_id)))
     try:
