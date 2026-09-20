@@ -1,6 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -12,7 +15,7 @@ from app.schemas import SECTIONS, SectionStat, StatsOut, VisitIn
 router = APIRouter(prefix="/visits", tags=["visits"])
 
 DbSession = Annotated[Session, Depends(get_db)]
-
+STATS_CACHE_SECONDS = 30
 
 @router.post("", status_code=status.HTTP_204_NO_CONTENT)
 def record_visit(visit: VisitIn, db: DbSession) -> None:
@@ -22,15 +25,29 @@ def record_visit(visit: VisitIn, db: DbSession) -> None:
     except IntegrityError:
         # Esta sesión ya había abierto la sección: no se cuenta otra vez.
         db.rollback()
-
-
+        
+        
 @router.get("/stats")
-def get_stats(db: DbSession) -> StatsOut:
-    rows = db.execute(select(Visit.section, func.count()).group_by(Visit.section)).all()
-    counts: dict[str, int] = dict(rows)
+def get_stats(
+    db: DbSession,
+    response: Response,
+    days: Annotated[int | None, Query(ge=1, le=365, description="Contar solo los últimos N días")] = None,
+) -> StatsOut:
+    query = select(Visit.section, func.count()).group_by(Visit.section)
+    if days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        query = query.where(Visit.created_at >= cutoff)
+
+    counts: dict[str, int] = dict(db.execute(query).all())
     sections = sorted(
         (SectionStat(section=s, visits=counts.get(s, 0)) for s in SECTIONS),
         key=lambda stat: stat.visits,
         reverse=True,
     )
-    return StatsOut(total=sum(counts.values()), sections=sections)
+    response.headers["Cache-Control"] = f"public, max-age={STATS_CACHE_SECONDS}"
+    return StatsOut(
+        total=sum(counts.values()),
+        sections=sections,
+        days=days,
+        generated_at=datetime.now(timezone.utc),
+    )

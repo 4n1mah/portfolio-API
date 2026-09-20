@@ -1,5 +1,6 @@
 from typing import Literal, get_args
 from uuid import UUID
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -20,3 +21,5 @@ class SectionStat(BaseModel):
 class StatsOut(BaseModel):
     total: int
     sections: list[SectionStat]
+    days: int | None = None
+    generated_at: datetime

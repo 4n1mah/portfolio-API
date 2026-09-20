@@ -1,5 +1,7 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+from app.models import Visit
 
 def visit(client, section, session_id=None):
     return client.post(
@@ -44,3 +46,26 @@ def test_same_session_counts_once(client):
 
 def test_rejects_unknown_section(client):
     assert visit(client, "admin").status_code == 422
+
+
+def test_days_filter_ignores_older_visits(client, db):
+    visit(client, "about")
+    db.add(Visit(section="skills", session_id=str(uuid4()), created_at=datetime.now(timezone.utc) - timedelta(days=30)))
+    db.commit()
+
+    all_time = client.get("/visits/stats").json()
+    last_week = client.get("/visits/stats", params={"days": 7}).json()
+
+    assert all_time["total"] == 2
+    assert last_week["total"] == 1
+    assert last_week["days"] == 7
+
+
+def test_days_must_be_a_real_window(client):
+    assert client.get("/visits/stats", params={"days": 0}).status_code == 422
+
+
+def test_stats_are_cacheable(client):
+    res = client.get("/visits/stats")
+
+    assert res.headers["cache-control"] == "public, max-age=30"
